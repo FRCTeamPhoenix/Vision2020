@@ -1,7 +1,7 @@
 unzip allwpilib-master.zip
-mv allwpilib-master wpiliba
-mv wpiliba ~
-cd ~/wpiliba
+mv allwpilib-master wpilib
+mv wpilib ~
+cd ~/wpilib
 mkdir build && cd build
 cmake -DWITHOUT_JAVA=ON ..
 make -j4
