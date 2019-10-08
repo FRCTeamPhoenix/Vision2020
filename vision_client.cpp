@@ -14,11 +14,32 @@ using namespace std;
 
 int main(int argc, char* argv[]) {
     cv::Mat frame;
+    
+    vector<string> bots{"0", "1", "2"};
+    vector<cs::CvSink> streams;
+
     nt::NetworkTableInstance ntinst = nt::NetworkTableInstance::GetDefault();
     ntinst.SetServerTeam(2342);
     ntinst.StartServer();
 
-    while (true) {
+    for (string bot : bots) {
+        cs::HttpCamera cam = cs::HttpCamera("Cam" + bot, "http://127.0.0.1:2342" + bot + "/stream.mjpg");
+        cam.SetResolution(720, 480);
+        cam.SetFPS(30);
+        cs::CvSink stream = cs::CvSink("Stream" + bot);
+        stream.SetSource(cam);
+        streams.push_back(stream);
+    }
+
+    cs::CvSink stream = streams.at(0);
+
+    while (true) {  
+        stream.GrabFrame(frame);
+        if (frame.empty()) {
+            cerr << "[ERROR] Blank frame grabbed." << endl;
+        } else {
+            cv::imshow("Live", frame);  
+        }
         if (cv::waitKey(5) >= 0) {
             break;
         }

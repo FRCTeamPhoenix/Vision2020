@@ -14,12 +14,15 @@ using namespace std;
 
 int main(int argc, char* argv[]) {
     cv::Mat frame;
+
+    string bot = "0";
+
     cs::UsbCamera camera = frc::CameraServer::GetInstance()->StartAutomaticCapture();
     camera.SetResolution(720, 480);
+
     cs::CvSink sink = frc::CameraServer::GetInstance()->GetVideo();
-    cs::CvSource output = frc::CameraServer::GetInstance()->PutVideo("Live", 720, 480);
-    cs::MjpegServer server = cs::MjpegServer("Team2342", 2342);
-    
+    cs::CvSource output = frc::CameraServer::GetInstance()->PutVideo("Source" + bot, 720, 480);
+    cs::MjpegServer server = cs::MjpegServer("Server" + bot, 23420 + stoi(bot));
     server.SetResolution(720, 480);
     server.SetCompression(80);
     server.SetFPS(30);
@@ -31,9 +34,6 @@ int main(int argc, char* argv[]) {
             cerr << "[ERROR] Blank frame grabbed." << endl;
         } else {
             output.PutFrame(frame);
-        }
-        if (cv::waitKey(5) >= 0) {
-            break;
         }
     }
     return 0;
