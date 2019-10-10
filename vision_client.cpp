@@ -16,8 +16,6 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <netdb.h>
-#include <assert.h>
 #include <string.h>
 #include <ctime>
 #include <iostream>
