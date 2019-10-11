@@ -78,7 +78,7 @@ int main(int argc, char* argv[]) {
     send_addr.sin_family = AF_INET;
     send_addr.sin_port = (in_port_t) htons(REMOTEPORT);
     // broadcasting address for unix (?)
-    inet_aton("127.255.255.255", &send_addr.sin_addr);
+    inet_aton("10.0.0.255", &send_addr.sin_addr);
     // send_addr.sin_addr.s_addr = htonl(INADDR_BROADCAST);
     #endif // ! RECV_ONLY
 

@@ -28,19 +28,20 @@
 using namespace std;
 
 int network_send(int fd, sockaddr_in addr, char* msg);
-int network_recv(int fd, sockaddr_in addr, char* buf, size_t len);
+int network_recv(int fd, char* buf, size_t len);
+vector<string> connect_loop(int fd, sockaddr_in send_addr, char* local_ip);
 
 int main(int argc, char* argv[]) {
     struct sockaddr_in send_addr, recv_addr;
     struct sockaddr_in *sa;
     struct ifaddrs *ifap, *ifa;
-    string local_ip;
     const char* ex = "lo";
     char* excl = (char *) ex;
     char* local_addr;
+    char* local_ip;
+    bool connected = false;
 
     vector<cs::CvSink> streams;
-    vector<string> bots;
     cv::Mat frame;
 
     int trueflag = 1, count = 0;
@@ -55,7 +56,7 @@ int main(int argc, char* argv[]) {
             ipaddr = "//" + ipaddr;
             if (ipaddr.find("10") == 2) {
                 ipaddr.erase(0, 2);
-                local_ip.assign(ipaddr);
+                local_ip = strdup(ipaddr.c_str());
             }
         }
     }
@@ -93,27 +94,7 @@ int main(int argc, char* argv[]) {
     }    
     #endif // ! SEND_ONLY
 
-    while (true) {
-        char recv_buf[30];
-        network_recv(fd, recv_addr, recv_buf, sizeof(recv_buf));
-        string recv_msg(recv_buf);
-        string identifier = recv_msg.substr(0, recv_msg.find("/") + 4);
-        if (identifier == "LOCALIP/BOT") {
-            string remote_ip = recv_msg.substr(recv_msg.find(":") + 1);
-            bots.push_back(remote_ip);
-
-            cout << "[STATUS] Connected to " << remote_ip << "\n";
-
-            char send_msg[30];
-            sprintf(send_msg, "LOCALIP/SERVER:%s", local_ip.c_str());
-            inet_pton(AF_INET, remote_ip.c_str(), &(send_addr.sin_addr));
-            network_send(fd, send_addr, send_msg);
-            usleep(1000000);
-            if (bots.size() == 3) break;
-
-            break;
-        }  
-    }
+    vector<string> bots = connect_loop(fd, send_addr, local_ip);
 
     vector<wpi::StringRef> refs;
     for (int i = 0; i < bots.size(); i++) {
@@ -122,6 +103,12 @@ int main(int argc, char* argv[]) {
     wpi::ArrayRef<wpi::StringRef> ips = wpi::ArrayRef(refs);
 
     nt::NetworkTableInstance ntinst = nt::NetworkTableInstance::GetDefault();
+    function<void(const nt::ConnectionNotification&)> connection_listener = [connected, bots, fd, send_addr, local_ip](const nt::ConnectionNotification& event) mutable { 
+        connected = event.connected; 
+        cout << "[STATUS] Connection status: " << (connected ? "connected" : "disconnected") << endl; 
+        bots = connect_loop(fd, send_addr, local_ip);
+    };
+    ntinst.AddConnectionListener(connection_listener, true);
     ntinst.SetServer(ips, 23420);
     ntinst.StartClient();
     ntinst.StartDSClient();
@@ -164,7 +151,7 @@ int network_send(int fd, struct sockaddr_in addr, char* msg) {
     #endif // ! RECV_ONLY
 }
 
-int network_recv(int fd, struct sockaddr_in addr, char* buf, size_t len) {
+int network_recv(int fd, char* buf, size_t len) {
     #ifndef SEND_ONLY
     if (recv(fd, buf, len-1, 0) < 0) {
         cerr << "[ERROR] Recieving failed" << endl;
@@ -172,4 +159,28 @@ int network_recv(int fd, struct sockaddr_in addr, char* buf, size_t len) {
     }
     return 0;
     #endif // ! SEND_ONLY
+}
+
+vector<string> connect_loop(int fd, sockaddr_in send_addr, char* local_ip) {
+    vector<string> bots;
+    while (true) {
+        char recv_buf[30];
+        network_recv(fd, recv_buf, sizeof(recv_buf));
+        string recv_msg(recv_buf);
+        string identifier = recv_msg.substr(0, recv_msg.find("/") + 4);
+        if (identifier == "LOCALIP/BOT") {
+            string remote_ip = recv_msg.substr(recv_msg.find(":") + 1);
+            bots.push_back(remote_ip);
+
+            cout << "[STATUS] Connected to " << remote_ip << "\n";
+
+            char send_msg[30];
+            sprintf(send_msg, "LOCALIP/SERVER:%s", local_ip);
+            inet_pton(AF_INET, remote_ip.c_str(), &(send_addr.sin_addr));
+            network_send(fd, send_addr, send_msg);
+            usleep(1000000);
+
+            if (bots.size() == 1) return bots;
+        }  
+    }
 }
