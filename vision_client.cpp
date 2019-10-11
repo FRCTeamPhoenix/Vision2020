@@ -67,16 +67,10 @@ int main(int argc, char* argv[]) {
     }
 
     #ifndef RECV_ONLY
-    if (setsockopt(fd, SOL_SOCKET, SO_BROADCAST, &trueflag, sizeof trueflag) < 0) {
-        cerr << "[ERROR] Sockopt send failed" << endl;
-    }
-
     memset(&send_addr, 0, sizeof send_addr);
     send_addr.sin_family = AF_INET;
     send_addr.sin_port = (in_port_t) htons(REMOTEPORT);
-    // broadcasting address for unix (?)
-    inet_aton("127.255.255.255", &send_addr.sin_addr);
-    // send_addr.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+    send_addr.sin_addr.s_addr = htonl(INADDR_ANY);
     #endif // ! RECV_ONLY
 
     #ifndef SEND_ONLY
