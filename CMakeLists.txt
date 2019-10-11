@@ -1,6 +1,14 @@
 cmake_minimum_required(VERSION 2.8)
 project(Vision2020)
 set(CMAKE_CXX_STANDARD 17)
+
+#[[
+set(CMAKE_SYSTEM_NAME Linux)
+set(CMAKE_SYSTEM_PROCESSOR arm)
+set(CMAKE_C_COMPILER /bin/arm-linux-gnueabihf-gcc)
+set(CMAKE_CXX_COMPILER /bin/arm-linux-gnueabihf-g++)
+]]
+
 set(WPILIB_PATH /usr/local/wpilib)
 include_directories(${WPILIB_PATH}/lib ${WPILIB_PATH}/include ${WPILIB_PATH}/include/cameraserver ${WPILIB_PATH}/include/cscore ${WPILIB_PATH}/include/hal ${WPILIB_PATH}/include/ntcore ${WPILIB_PATH}/include/wpilibc ${WPILIB_PATH}/include/wpiutil)
 find_package(OpenCV REQUIRED)
