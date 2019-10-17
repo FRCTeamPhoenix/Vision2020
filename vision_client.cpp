@@ -35,8 +35,7 @@ int main(int argc, char* argv[]) {
     struct sockaddr_in send_addr, recv_addr;
     struct sockaddr_in *sa;
     struct ifaddrs *ifap, *ifa;
-    const char* ex = "lo";
-    char* excl = (char *) ex;
+    char* incl = (char *) "wl";
     char* local_addr;
     char* local_ip;
     bool connected = false;
@@ -49,15 +48,19 @@ int main(int argc, char* argv[]) {
 
     getifaddrs (&ifap);
     for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
-        if (ifa->ifa_addr->sa_family==AF_INET && *ifa->ifa_name != *excl) {
-            sa = (struct sockaddr_in *) ifa->ifa_addr;
-            local_addr = inet_ntoa(sa->sin_addr);
-            string ipaddr(local_addr);
-            ipaddr = "//" + ipaddr;
-            if (ipaddr.find("10") == 2) {
-                ipaddr.erase(0, 2);
-                local_ip = strdup(ipaddr.c_str());
-            }
+        if (ifa->ifa_addr->sa_family==AF_INET) {
+            string if_name(ifa->ifa_name);
+            string incl_str(incl);
+            if (if_name.substr(0, 2) == incl_str) {
+                sa = (struct sockaddr_in *) ifa->ifa_addr;
+                local_addr = inet_ntoa(sa->sin_addr);
+                string ipaddr(local_addr);
+                ipaddr = "//" + ipaddr;
+                if (ipaddr.find("10") == 2) {
+                    ipaddr.erase(0, 2);
+                    local_ip.assign(ipaddr);
+                }
+            } 
         }
     }
     freeifaddrs(ifap);

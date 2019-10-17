@@ -20,6 +20,9 @@
 #include <iostream>
 #include <unistd.h>
 #include <ifaddrs.h>
+#include <net/if.h>
+#include <sys/ioctl.h>
+#include<linux/sockios.h>
 
 #define SERVERPORT 23421
 #define REMOTEPORT 23422
@@ -32,11 +35,11 @@ string connect_loop(int fd, sockaddr_in send_addr, sockaddr_in recv_addr, string
 
 int main(int argc, char* argv[]) {
     struct sockaddr_in send_addr, recv_addr;
-    struct sockaddr_in *sa;
+    struct sockaddr_in *sa, *brad;
     struct ifaddrs *ifap, *ifa;
+    struct ifreq ifr;
     string local_ip, server_ip;
-    const char* ex = "lo";
-    char* excl = (char *) ex;
+    char* incl = (char *) "wl";
     char* local_addr;
 
     bool connected = false;
@@ -50,15 +53,20 @@ int main(int argc, char* argv[]) {
 
     getifaddrs (&ifap);
     for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
-        if (ifa->ifa_addr->sa_family==AF_INET && *ifa->ifa_name != *excl) {
-            sa = (struct sockaddr_in *) ifa->ifa_addr;
-            local_addr = inet_ntoa(sa->sin_addr);
-            string ipaddr(local_addr);
-            ipaddr = "//" + ipaddr;
-            if (ipaddr.find("10") == 2) {
-                ipaddr.erase(0, 2);
-                local_ip.assign(ipaddr);
-            }
+        if (ifa->ifa_addr->sa_family==AF_INET) {
+            string if_name(ifa->ifa_name);
+            string incl_str(incl);
+            if (if_name.substr(0, 2) == incl_str) {
+                brad = (struct sockaddr_in *)ifa->ifa_ifu.ifu_broadaddr;
+                sa = (struct sockaddr_in *)ifa->ifa_addr;
+                local_addr = inet_ntoa(sa->sin_addr);
+                string ipaddr(local_addr);
+                ipaddr = "//" + ipaddr;
+                if (ipaddr.find("10") == 2) {
+                    ipaddr.erase(0, 2);
+                    local_ip.assign(ipaddr);
+                }
+            } 
         }
     }
     freeifaddrs(ifap);
@@ -67,7 +75,7 @@ int main(int argc, char* argv[]) {
         cerr << "[ERROR] Socket binding failed" << endl;
         return -1;
     }
-
+    
     #ifndef RECV_ONLY
     if (setsockopt(fd, SOL_SOCKET, SO_BROADCAST, &trueflag, sizeof trueflag) < 0) {
         cerr << "[ERROR] Sockopt broadcast failed" << endl;
@@ -77,9 +85,9 @@ int main(int argc, char* argv[]) {
     memset(&send_addr, 0, sizeof send_addr);
     send_addr.sin_family = AF_INET;
     send_addr.sin_port = (in_port_t) htons(REMOTEPORT);
-    // broadcasting address for unix (?)
-    inet_aton("10.0.0.255", &send_addr.sin_addr);
-    // send_addr.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+    //inet_aton("10.0.0.255", &send_addr.sin_addr);
+    //send_addr.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+    send_addr.sin_addr = brad->sin_addr;
     #endif // ! RECV_ONLY
 
     #ifndef SEND_ONLY
