@@ -58,7 +58,7 @@ int main(int argc, char* argv[]) {
                 ipaddr = "//" + ipaddr;
                 if (ipaddr.find("10") == 2) {
                     ipaddr.erase(0, 2);
-                    local_ip.assign(ipaddr);
+                    local_ip = strdup(ipaddr.c_str());
                 }
             } 
         }
