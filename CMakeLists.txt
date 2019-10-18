@@ -5,12 +5,12 @@ set(OpenCV_STATIC ON)
 set(WPILIB_PATH /usr/local/wpilib)
 cmake_policy(SET CMP0028 NEW)
 
-#[[
+set("OpenCV_DIR" /home/mason/opencv/build)
 set(CMAKE_SYSTEM_NAME Linux)
 set(CMAKE_SYSTEM_PROCESSOR arm)
 set(CMAKE_C_COMPILER /bin/arm-linux-gnueabihf-gcc)
 set(CMAKE_CXX_COMPILER /bin/arm-linux-gnueabihf-g++)
-]]
+
 
 project(Vision2020)
 
