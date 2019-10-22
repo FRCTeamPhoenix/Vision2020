@@ -39,8 +39,7 @@ int main(int argc, char* argv[]) {
     struct ifaddrs *ifap, *ifa;
     struct ifreq ifr;
     string local_ip, server_ip;
-    char* incl = (char *) "wl";
-    char* local_addr;
+    char* ifaddr;
 
     bool connected = false;
     string bot = "0";   
@@ -54,17 +53,15 @@ int main(int argc, char* argv[]) {
     getifaddrs (&ifap);
     for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
         if (ifa->ifa_addr->sa_family==AF_INET) {
-            string if_name(ifa->ifa_name);
-            string incl_str(incl);
-            if (if_name.substr(0, 2) == incl_str) {
-                brad = (struct sockaddr_in *)ifa->ifa_ifu.ifu_broadaddr;
+            if ((ifa->ifa_flags & IFF_BROADCAST)) {
                 sa = (struct sockaddr_in *)ifa->ifa_addr;
-                local_addr = inet_ntoa(sa->sin_addr);
-                string ipaddr(local_addr);
+                ifaddr = inet_ntoa(sa->sin_addr);
+                string ipaddr(ifaddr);
                 ipaddr = "//" + ipaddr;
                 if (ipaddr.find("10") == 2) {
                     ipaddr.erase(0, 2);
                     local_ip.assign(ipaddr);
+                    brad = (struct sockaddr_in *)ifa->ifa_ifu.ifu_broadaddr;
                 }
             } 
         }

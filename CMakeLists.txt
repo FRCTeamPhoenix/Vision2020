@@ -17,7 +17,7 @@ project(Vision2020)
 
 include_directories(${WPILIB_PATH}/lib ${WPILIB_PATH}/include ${WPILIB_PATH}/include/cameraserver ${WPILIB_PATH}/include/cscore ${WPILIB_PATH}/include/ntcore ${WPILIB_PATH}/include/wpiutil)
 
-#find_package(Eigen3 3.3 REQUIRED NO_MODULE)
+find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 find_package(OpenCV REQUIRED)
 find_package(Threads REQUIRED)
 

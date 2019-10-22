@@ -32,12 +32,9 @@ int network_recv(int fd, char* buf, size_t len);
 vector<string> connect_loop(int fd, sockaddr_in send_addr, char* local_ip);
 
 int main(int argc, char* argv[]) {
-    struct sockaddr_in send_addr, recv_addr;
-    struct sockaddr_in *sa;
+    struct sockaddr_in send_addr, recv_addr, *sa;
     struct ifaddrs *ifap, *ifa;
-    char* incl = (char *) "wl";
-    char* local_addr;
-    char* local_ip;
+    char *ifaddr, *local_ip;
     bool connected = false;
 
     vector<cs::CvSink> streams;
@@ -49,18 +46,14 @@ int main(int argc, char* argv[]) {
     getifaddrs (&ifap);
     for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
         if (ifa->ifa_addr->sa_family==AF_INET) {
-            string if_name(ifa->ifa_name);
-            string incl_str(incl);
-            if (if_name.substr(0, 2) == incl_str) {
-                sa = (struct sockaddr_in *) ifa->ifa_addr;
-                local_addr = inet_ntoa(sa->sin_addr);
-                string ipaddr(local_addr);
-                ipaddr = "//" + ipaddr;
-                if (ipaddr.find("10") == 2) {
-                    ipaddr.erase(0, 2);
-                    local_ip = strdup(ipaddr.c_str());
-                }
-            } 
+            sa = (struct sockaddr_in *) ifa->ifa_addr;
+            ifaddr = inet_ntoa(sa->sin_addr);
+            string ipaddr(ifaddr);
+            ipaddr = "//" + ipaddr;
+            if (ipaddr.find("10") == 2) {
+                ipaddr.erase(0, 2);
+                local_ip = strdup(ipaddr.c_str());
+            }
         }
     }
     freeifaddrs(ifap);
