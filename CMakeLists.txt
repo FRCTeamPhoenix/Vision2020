@@ -6,7 +6,7 @@ set(WPILIB_PATH /usr/local/wpilib)
 cmake_policy(SET CMP0028 NEW)
 
 if(${CC_ARM})
-	set("OpenCV_DIR" ~/opencv/build)
+	set("OpenCV_DIR" /home/maeswoon/opencv/build)
 	set(CMAKE_SYSTEM_NAME Linux)
 	set(CMAKE_SYSTEM_PROCESSOR arm)
 	set(CMAKE_C_COMPILER /bin/arm-linux-gnueabihf-gcc)
@@ -17,7 +17,7 @@ project(Vision2020)
 
 include_directories(${WPILIB_PATH}/lib ${WPILIB_PATH}/include ${WPILIB_PATH}/include/cameraserver ${WPILIB_PATH}/include/cscore ${WPILIB_PATH}/include/ntcore ${WPILIB_PATH}/include/wpiutil)
 
-find_package (Eigen3 3.3 REQUIRED NO_MODULE)
+#find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 find_package(OpenCV REQUIRED)
 find_package(Threads REQUIRED)
 
