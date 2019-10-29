@@ -22,7 +22,7 @@
 #include <ifaddrs.h>
 #include <net/if.h>
 #include <sys/ioctl.h>
-#include<linux/sockios.h>
+#include <linux/sockios.h>
 
 #define LOCALPORT 23421
 #define REMOTEPORT 23422
@@ -73,7 +73,6 @@ int main(int argc, char* argv[]) {
         return -1;
     }
     
-    #ifndef RECV_ONLY
     if (setsockopt(fd, SOL_SOCKET, SO_BROADCAST, &trueflag, sizeof trueflag) < 0) {
         cerr << "[ERROR] Sockopt broadcast failed" << endl;
         return -1;
@@ -85,9 +84,7 @@ int main(int argc, char* argv[]) {
     //inet_aton("10.0.0.255", &send_addr.sin_addr);
     //send_addr.sin_addr.s_addr = htonl(INADDR_BROADCAST);
     send_addr.sin_addr = brad->sin_addr;
-    #endif // ! RECV_ONLY
 
-    #ifndef SEND_ONLY
     if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &trueflag, sizeof trueflag) < 0) {
         cerr << "[ERROR] Sockopt recv failed" << endl;
         return -1;
@@ -102,7 +99,6 @@ int main(int argc, char* argv[]) {
         cerr << "[ERROR] Socket binding failed" << endl;
         return -1;
     }    
-    #endif // ! SEND_ONLY
 
     if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(struct timeval)) < 0) {
         cerr << "[ERROR] Sockopt timeout failed" << endl;
@@ -143,22 +139,18 @@ int main(int argc, char* argv[]) {
 }
 
 int network_send(int fd, struct sockaddr_in addr, char* msg) {
-    #ifndef RECV_ONLY
     if (sendto(fd, msg, strlen(msg)+1, 0, (struct sockaddr*) &addr, sizeof addr) < 0) {
         cerr << "[ERROR] Sending failed" << endl;
         return -1;
     }        
     return 0;
-    #endif // ! RECV_ONLY
 }
 
 int network_recv(int fd, struct sockaddr_in addr, char* buf, size_t len) {
-    #ifndef SEND_ONLY
     if (recv(fd, buf, len-1, 0) < 0) {
         return -1;
     }
     return 0;
-    #endif // ! SEND_ONLY
 }
 
 string connect_loop(int fd, struct sockaddr_in send_addr, struct sockaddr_in recv_addr, string bot, string local_ip) {

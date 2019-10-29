@@ -22,14 +22,15 @@
 #include <unistd.h>
 #include <ifaddrs.h>
 
-#define SERVERPORT 23422
+#define LOCALPORT 23422
 #define REMOTEPORT 23421
 
 using namespace std;
 
 int network_send(int fd, sockaddr_in addr, char* msg);
 int network_recv(int fd, char* buf, size_t len);
-vector<string> connect_loop(int fd, sockaddr_in send_addr, char* local_ip);
+vector<string> connect_loop(int fd, sockaddr_in send_addr, char *local_ip, bool &connected);
+void display_loop(bool &connected, wpi::ArrayRef<wpi::StringRef> *ips, nt::NetworkTableInstance *ntinst);
 
 int main(int argc, char* argv[]) {
     struct sockaddr_in send_addr, recv_addr, *sa;
@@ -38,7 +39,6 @@ int main(int argc, char* argv[]) {
     bool connected = false;
 
     vector<cs::CvSink> streams;
-    cv::Mat frame;
 
     int trueflag = 1, count = 0;
     int fd;
@@ -62,29 +62,25 @@ int main(int argc, char* argv[]) {
         cerr << "[ERROR] Socket binding failed" << endl;
     }
 
-    #ifndef RECV_ONLY
     memset(&send_addr, 0, sizeof send_addr);
     send_addr.sin_family = AF_INET;
     send_addr.sin_port = (in_port_t) htons(REMOTEPORT);
     send_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    #endif // ! RECV_ONLY
 
-    #ifndef SEND_ONLY
     if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &trueflag, sizeof trueflag) < 0) {
         cerr << "[ERROR] Sockopt recv failed" << endl;
     }
 
     memset(&recv_addr, 0, sizeof recv_addr);
     recv_addr.sin_family = AF_INET;
-    recv_addr.sin_port = (in_port_t) htons(SERVERPORT);
+    recv_addr.sin_port = (in_port_t) htons(LOCALPORT);
     recv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
     if (bind(fd, (struct sockaddr*) &recv_addr, sizeof recv_addr) < 0) {
         cerr << "[ERROR] Socket binding failed" << endl;
     }    
-    #endif // ! SEND_ONLY
 
-    vector<string> bots = connect_loop(fd, send_addr, local_ip);
+    vector<string> bots = connect_loop(fd, send_addr, local_ip, connected);
 
     vector<wpi::StringRef> refs;
     for (int i = 0; i < bots.size(); i++) {
@@ -93,65 +89,45 @@ int main(int argc, char* argv[]) {
     wpi::ArrayRef<wpi::StringRef> ips = wpi::ArrayRef(refs);
 
     nt::NetworkTableInstance ntinst = nt::NetworkTableInstance::GetDefault();
-    function<void(const nt::ConnectionNotification&)> connection_listener = [connected, bots, fd, send_addr, local_ip](const nt::ConnectionNotification& event) mutable { 
+    function<void(const nt::ConnectionNotification&)> connection_listener = [connected, bots, fd, send_addr, local_ip, ntinst](const nt::ConnectionNotification& event) mutable { 
         connected = event.connected; 
         cout << "[STATUS] Connection status: " << (connected ? "connected" : "disconnected") << endl; 
-        bots = connect_loop(fd, send_addr, local_ip);
-    };
-    ntinst.AddConnectionListener(connection_listener, true);
-    ntinst.SetServer(ips, 23420);
-    ntinst.StartClient();
-    ntinst.StartDSClient();
-
-    for (int i = 0; i < ips.size(); i++) {
-        cs::HttpCamera cam = cs::HttpCamera("Cam" + to_string(i), "http://" + ips.vec().at(i) + ":2342/stream.mjpg");
-        cam.SetResolution(720, 480);
-        cam.SetFPS(30);
-        cs::CvSink stream = cs::CvSink("Stream" + to_string(i));
-        stream.SetSource(cam);
-        streams.push_back(stream);
-    }
-
-    cs::CvSink stream = streams.at(0);
-
-    cout << "Showing stream" << endl;
-    while (true) {  
-        for (int i=0; i < streams.size(); i++) {
-            cs::CvSink stream = streams.at(i);
-            stream.GrabFrame(frame);
-            if (!frame.empty()) {
-                cv::imshow("Stream" + to_string(i), frame);  
+        if (!connected) {
+            ntinst.StopClient();
+            ntinst.StopDSClient();
+            bots = connect_loop(fd, send_addr, local_ip, connected);
+            vector<wpi::StringRef> refs;
+            for (int i = 0; i < bots.size(); i++) {
+                refs.push_back(wpi::StringRef(bots.at(i)));
             }
-            if (cv::waitKey(5) >= 0) {
-                break;
-            }
+            wpi::ArrayRef<wpi::StringRef> ips = wpi::ArrayRef(refs);
+            display_loop(connected, &ips, &ntinst);
         }
-        
-    }
+    };
+
+    ntinst.AddConnectionListener(connection_listener, true);
+    display_loop(connected, &ips, &ntinst);
+
     return 0;
 }
 
 int network_send(int fd, struct sockaddr_in addr, char* msg) {
-    #ifndef RECV_ONLY
     if (sendto(fd, msg, strlen(msg)+1, 0, (struct sockaddr*) &addr, sizeof addr) < 0) {
         cerr << "[ERROR] Sending failed" << endl;
         return -1;
     }        
     return 0;
-    #endif // ! RECV_ONLY
 }
 
 int network_recv(int fd, char* buf, size_t len) {
-    #ifndef SEND_ONLY
     if (recv(fd, buf, len-1, 0) < 0) {
         cerr << "[ERROR] Recieving failed" << endl;
         return -1;
     }
     return 0;
-    #endif // ! SEND_ONLY
 }
 
-vector<string> connect_loop(int fd, sockaddr_in send_addr, char* local_ip) {
+vector<string> connect_loop(int fd, sockaddr_in send_addr, char *local_ip, bool &connected) {
     vector<string> bots;
     while (true) {
         char recv_buf[30];
@@ -162,7 +138,8 @@ vector<string> connect_loop(int fd, sockaddr_in send_addr, char* local_ip) {
             string remote_ip = recv_msg.substr(recv_msg.find(":") + 1);
             bots.push_back(remote_ip);
 
-            cout << "[STATUS] Connected to " << remote_ip << "\n";
+            cout << "[STATUS] Connected to " << remote_ip << endl;
+            connected = true;
 
             char send_msg[30];
             sprintf(send_msg, "LOCALIP/SERVER:%s", local_ip);
@@ -173,4 +150,41 @@ vector<string> connect_loop(int fd, sockaddr_in send_addr, char* local_ip) {
             if (bots.size() == 1) return bots;
         }  
     }
+}
+
+void display_loop(bool &connected, wpi::ArrayRef<wpi::StringRef> *ips, nt::NetworkTableInstance *ntinst) {
+    ntinst->SetServer(*ips, 23420);
+    ntinst->StartClient();
+    ntinst->StartDSClient();
+
+    vector<cs::CvSink> streams;
+    vector<cs::HttpCamera> cams;
+
+    for (int i = 0; i < ips->size(); i++) {
+        cams.push_back(cs::HttpCamera("Cam" + to_string(i), "http://" + ips->vec().at(i) + ":2342/stream.mjpg"));
+        cams.at(i).SetResolution(720, 480);
+        cams.at(i).SetFPS(30);
+        cs::CvSink stream = cs::CvSink("Stream" + to_string(i));
+        stream.SetSource(cams.at(i));
+        streams.push_back(stream);
+    }
+
+    cs::CvSink stream = streams.at(0);
+
+    cout << "Showing stream" << endl;
+    cv::Mat frame;
+    while (connected) {  
+        for (int i = 0; i < streams.size(); i++) {
+            cs::CvSink stream = streams.at(i);
+            stream.GrabFrame(frame);
+            if (!frame.empty()) {
+                cv::imshow("Stream" + to_string(i), frame);  
+            }
+            if (cv::waitKey(5) >= 0) {
+                break;
+            }
+        }
+    }
+    cams.clear();
+    streams.clear();
 }
