@@ -24,7 +24,7 @@
 #include <sys/ioctl.h>
 #include<linux/sockios.h>
 
-#define SERVERPORT 23421
+#define LOCALPORT 23421
 #define REMOTEPORT 23422
 
 using namespace std;
@@ -42,7 +42,7 @@ int main(int argc, char* argv[]) {
     char* ifaddr;
 
     bool connected = false;
-    string bot = "0";   
+    string bot = "0";
     cv::Mat frame;
     struct timeval tv;
     tv.tv_sec = 1;
@@ -63,7 +63,7 @@ int main(int argc, char* argv[]) {
                     local_ip.assign(ipaddr);
                     brad = (struct sockaddr_in *)ifa->ifa_ifu.ifu_broadaddr;
                 }
-            } 
+            }
         }
     }
     freeifaddrs(ifap);
@@ -95,7 +95,7 @@ int main(int argc, char* argv[]) {
 
     memset(&recv_addr, 0, sizeof recv_addr);
     recv_addr.sin_family = AF_INET;
-    recv_addr.sin_port = (in_port_t) htons(SERVERPORT);
+    recv_addr.sin_port = (in_port_t) htons(LOCALPORT);
     recv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
     if (bind(fd, (struct sockaddr*) &recv_addr, sizeof recv_addr) < 0) {
@@ -166,8 +166,8 @@ string connect_loop(int fd, struct sockaddr_in send_addr, struct sockaddr_in rec
         char send_msg[50];
         sprintf(send_msg, "LOCALIP/BOT%s:%s", bot.c_str(), local_ip.c_str());
         network_send(fd, send_addr, send_msg);
-        
-        usleep(1000000/2);
+
+        usleep(1000000);
 
         char recv_msg[50];
         network_recv(fd, recv_addr, recv_msg, sizeof(recv_msg));
