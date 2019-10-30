@@ -15,14 +15,10 @@
 #include <string.h>
 #include <ctime>
 #include <iostream>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <ifaddrs.h>
-#include <net/if.h>
-#include <sys/ioctl.h>
-#include <linux/sockios.h>
+
+#include <winsock2.h>
+#include <windows.h>
+#include <iphlpapi.h>
 
 #define LOCALPORT 23421
 #define REMOTEPORT 23422

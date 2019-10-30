@@ -13,14 +13,17 @@
 
 #include <stdio.h>
 #include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
 #include <string.h>
 #include <ctime>
 #include <iostream>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <unistd.h>
 #include <ifaddrs.h>
+#include <net/if.h>
+#include <sys/ioctl.h>
+#include <linux/sockios.h>
 
 #define LOCALPORT 23422
 #define REMOTEPORT 23421
@@ -43,7 +46,7 @@ int main(int argc, char* argv[]) {
     int trueflag = 1, count = 0;
     int fd;
 
-    getifaddrs (&ifap);
+    getifaddrs(&ifap);
     for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
         if (ifa->ifa_addr->sa_family==AF_INET) {
             sa = (struct sockaddr_in *) ifa->ifa_addr;
