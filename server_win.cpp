@@ -51,6 +51,7 @@ int main(int argc, char* argv[]) {
 
 	if (WSAStartup(MAKEWORD(1, 1), &WsaData) < 0) {
 		cout << "[ERROR] WSA Startup error" << endl;
+		return -1;
 	}
 
 	if ((fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
@@ -63,7 +64,10 @@ int main(int argc, char* argv[]) {
 		return -1;
 	}
 
-	get_ip(local_ip, br_addr);
+	if (get_ip(local_ip, br_addr) < 0) {
+		cerr << "[ERROR] Could not retrieve IP Address" << endl;
+		return -1;
+	}
 
 	memset(&send_addr, 0, sizeof send_addr);
 	send_addr.sin_family = AF_INET;
@@ -76,7 +80,7 @@ int main(int argc, char* argv[]) {
 		return -1;
 	}
 
-	memset(&recv_addr, 0, sizeof recv_addr);
+	memset(&recv_addr, 0, sizeof(recv_addr));
 	recv_addr.sin_family = AF_INET;
 	recv_addr.sin_port = (u_short)htons(LOCALPORT);
 	recv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -164,47 +168,77 @@ string connect_loop(int fd, struct sockaddr_in send_addr, struct sockaddr_in rec
 }
 
 int get_ip(string& ip, string& braddr) {
-	PMIB_IPADDRTABLE pIPAddrTable;
+	PIP_ADAPTER_ADDRESSES IPAddrs, CurAddrs;
+	PIP_ADAPTER_UNICAST_ADDRESS localAddr;
+	PIP_ADAPTER_MULTICAST_ADDRESS brAddr;
+	ULONG bufSize = 15000, tries = 0;
 	DWORD dwSize = 0;
 	DWORD dwRetVal = 0;
 	IN_ADDR IPAddr;
 	LPVOID lpMsgBuf;
 
-	pIPAddrTable = (MIB_IPADDRTABLE*)MALLOC(sizeof(MIB_IPADDRTABLE));
+	ULONG flags = GAA_FLAG_INCLUDE_PREFIX;
+	IPAddrs = (IP_ADAPTER_ADDRESSES*)MALLOC(sizeof(IP_ADAPTER_ADDRESSES));
+	CurAddrs = (IP_ADAPTER_ADDRESSES*)MALLOC(sizeof(IP_ADAPTER_ADDRESSES));
 
-	if (pIPAddrTable) {
-		if (GetIpAddrTable(pIPAddrTable, &dwSize, 0) ==
-			ERROR_INSUFFICIENT_BUFFER) {
-			FREE(pIPAddrTable);
-			pIPAddrTable = (MIB_IPADDRTABLE*)MALLOC(dwSize);
+	do {
+		IPAddrs = (IP_ADAPTER_ADDRESSES*)MALLOC(bufSize);
+		if (IPAddrs == NULL) {
+			cerr << "[ERROR] MALLOC for IPAddrs failed" << endl;
+			return -1;
 		}
-		if (pIPAddrTable == NULL) {
-			exit(1);
+
+		dwRetVal = GetAdaptersAddresses(AF_INET, flags, NULL, IPAddrs, &bufSize);
+
+		if (dwRetVal == ERROR_BUFFER_OVERFLOW) {
+			FREE(IPAddrs);
+			IPAddrs = NULL;
 		}
-	}
-
-	if ((dwRetVal = GetIpAddrTable(pIPAddrTable, &dwSize, 0)) != NO_ERROR) {
-		return 1;
-	}
-
-	for (int i = 0; i < (int)(pIPAddrTable->dwNumEntries); i++) {
-		IPAddr.S_un.S_addr = (u_long)pIPAddrTable->table[i].dwAddr;
-		string local_ip(inet_ntoa(IPAddr));
-		IPAddr.S_un.S_addr = (u_long)pIPAddrTable->table[i].dwBCastAddr;
-		string br_addr(inet_ntoa(IPAddr));
-		local_ip = "//" + local_ip;
-		if (local_ip.find("10") == 2) {
-			local_ip.erase(0, 2);
-			ip = local_ip;
-			braddr = br_addr;
-			cout << local_ip << endl;
-			cout << br_addr << endl;
+		else {
+			break;
 		}
-	}
+		tries++;
+	} while ((dwRetVal == ERROR_BUFFER_OVERFLOW) && (tries < 10));
 
-	if (pIPAddrTable) {
-		FREE(pIPAddrTable);
-		pIPAddrTable = NULL;
+
+	if (dwRetVal == NO_ERROR) {
+		CurAddrs = IPAddrs;
+		while (CurAddrs) {
+			string local_addr, br_addr;
+			bool valid_ip = false;
+			localAddr = CurAddrs->FirstUnicastAddress;
+			if (localAddr) {
+				for (int i = 0; localAddr != NULL; i++) {
+					char* ipChar = inet_ntoa(((sockaddr_in*)localAddr->Address.lpSockaddr)->sin_addr);
+					string ip_str(ipChar);
+					ip_str = "//" + ip_str;
+					if (ip_str.find("10") == 2) {
+						ip_str.erase(0, 2);
+						local_addr.assign(ip_str);
+						valid_ip = true;
+					}
+					localAddr = localAddr->Next;
+				}
+			}
+			brAddr = CurAddrs->FirstMulticastAddress;
+			if (brAddr) {
+				for (int i = 0; brAddr != NULL; i++) {
+					char* brChar = inet_ntoa(((sockaddr_in*)brAddr->Address.lpSockaddr)->sin_addr);
+					string br_str(brChar);
+					br_str = "//" + br_str;
+					if (br_str.find("224") != 2 && valid_ip) {
+						br_str.erase(0, 2);
+						br_addr.assign(br_str);
+					}
+					brAddr = brAddr->Next;
+				}
+			}
+			if (valid_ip) {
+				ip = local_addr;
+				braddr = br_addr;
+			}
+			CurAddrs = CurAddrs->Next;
+		}
 	}
 
 	return 0;

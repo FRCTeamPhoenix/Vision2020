@@ -54,7 +54,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	get_ip(temp_ip);
-	strcpy(local_ip, temp_ip.c_str());
+	if (local_ip != 0) strcpy(local_ip, temp_ip.c_str());
 
 	if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
 		cerr << "[ERROR] Socket binding failed" << endl;
