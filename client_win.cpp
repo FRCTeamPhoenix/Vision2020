@@ -106,6 +106,7 @@ int main(int argc, char* argv[]) {
 	ntinst.AddConnectionListener(connection_listener, true);
 	display_loop(connected, &ips, &ntinst);
 
+	WSACleanup();
 	return 0;
 }
 

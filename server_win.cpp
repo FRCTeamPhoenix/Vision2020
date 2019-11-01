@@ -45,15 +45,13 @@ int main(int argc, char* argv[]) {
 	char trueflag = 'a';
 	int fd;
 	WSADATA WsaData;
-	PCWSTR opt;
+	PCSTR opt;
 	cv::Mat frame;
 	int tv = 500;
 
 	if (WSAStartup(MAKEWORD(1, 1), &WsaData) < 0) {
 		cout << "[ERROR] WSA Startup error" << endl;
 	}
-
-	get_ip(local_ip, br_addr);
 
 	if ((fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
 		cerr << "[ERROR] Socket binding failed" << endl;
@@ -65,12 +63,13 @@ int main(int argc, char* argv[]) {
 		return -1;
 	}
 
+	get_ip(local_ip, br_addr);
+
 	memset(&send_addr, 0, sizeof send_addr);
 	send_addr.sin_family = AF_INET;
 	send_addr.sin_port = (u_short)htons(REMOTEPORT);
-	opt = (PCWSTR)br_addr.c_str();
-	cout << opt << endl;
-	InetPtonW(AF_INET, opt, &send_addr.sin_addr);
+	opt = (PCSTR)br_addr.c_str();
+	InetPtonA(AF_INET, opt, &send_addr.sin_addr);
 
 	if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &trueflag, sizeof(trueflag)) < 0) {
 		cerr << "[ERROR] Sockopt recv failed" << endl;
@@ -123,6 +122,8 @@ int main(int argc, char* argv[]) {
 			output.PutFrame(frame);
 		}
 	}
+
+	WSACleanup();
 	return 0;
 }
 
@@ -186,7 +187,7 @@ int get_ip(string& ip, string& braddr) {
 		return 1;
 	}
 
-	for (int i = 0; i < (int)pIPAddrTable->dwNumEntries; i++) {
+	for (int i = 0; i < (int)(pIPAddrTable->dwNumEntries); i++) {
 		IPAddr.S_un.S_addr = (u_long)pIPAddrTable->table[i].dwAddr;
 		string local_ip(inet_ntoa(IPAddr));
 		IPAddr.S_un.S_addr = (u_long)pIPAddrTable->table[i].dwBCastAddr;

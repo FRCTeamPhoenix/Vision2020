@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 2.8)
 set(CMAKE_CXX_STANDARD 17)
-if(MSVC)
+if(WIN32)
 	set(OpenCV_DIR C:\\OpenCV\\build)
 	set(WPILIB_PATH C:\\WPILib\\build)
 	set(CMAKE_FIND_LIBRARY_SUFFIXES ".lib")
@@ -23,14 +23,14 @@ project(Vision2020)
 
 include_directories(${WPILIB_PATH}/lib ${WPILIB_PATH}/include ${WPILIB_PATH}/include/cameraserver ${WPILIB_PATH}/include/cscore ${WPILIB_PATH}/include/ntcore ${WPILIB_PATH}/include/wpiutil)
 
-if(NOT MSVC)
+if(NOT WIN32)
 	find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 endif()
 
 find_package(OpenCV REQUIRED)
 find_package(Threads REQUIRED)
 
-if(MSVC)
+if(WIN32)
 	add_executable(client_win client_win.cpp)
 	add_executable(server_win server_win.cpp)
 	target_link_libraries(client_win wsock32 ws2_32 ${OpenCV_LIBS} ${CMAKE_THREAD_LIBS_INIT} ${WPILIB_PATH}/lib/cameraserverd.lib ${WPILIB_PATH}/lib/cscored.lib ${WPILIB_PATH}/lib/ntcored.lib ${WPILIB_PATH}/lib/wpiutild.lib)
