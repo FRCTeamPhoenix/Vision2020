@@ -1,5 +1,3 @@
-
-
 #include <networktables/NetworkTable.h>
 #include <networktables/NetworkTableEntry.h>
 #include <networktables/NetworkTableInstance.h>
@@ -20,9 +18,17 @@
 #include <iostream>
 
 #include <winsock2.h>
+#include <WS2tcpip.h>
 #include <windows.h>
 #include <iphlpapi.h>
+#include <stdlib.h>
+#include <synchapi.h>
 
+#pragma comment(lib, "iphlpapi.lib")
+#pragma comment(lib, "ws2_32.lib")
+
+#define MALLOC(x) HeapAlloc(GetProcessHeap(), 0, (x))
+#define FREE(x) HeapFree(GetProcessHeap(), 0, (x))
 #define LOCALPORT 23422
 #define REMOTEPORT 23421
 
@@ -32,32 +38,23 @@ int network_send(int fd, sockaddr_in addr, char* msg);
 int network_recv(int fd, char* buf, size_t len);
 vector<string> connect_loop(int fd, sockaddr_in send_addr, char* local_ip, bool& connected);
 void display_loop(bool& connected, wpi::ArrayRef<wpi::StringRef>* ips, nt::NetworkTableInstance* ntinst);
+int get_ip(string& ip);
 
 int main(int argc, char* argv[]) {
-	struct sockaddr_in send_addr, recv_addr, * sa;
-	struct ifaddrs* ifap, * ifa;
-	char* ifaddr, * local_ip;
-	bool connected = false;
-
+	struct sockaddr_in send_addr, recv_addr;
 	vector<cs::CvSink> streams;
+	bool connected = false;
+	int trueflag = 1, fd;
+	WSADATA WsaData;
+	char* local_ip = (char*)MALLOC(sizeof(char));
+	string temp_ip;
 
-	int trueflag = 1, count = 0;
-	int fd;
-
-	getifaddrs(&ifap);
-	for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
-		if (ifa->ifa_addr->sa_family == AF_INET) {
-			sa = (struct sockaddr_in*) ifa->ifa_addr;
-			ifaddr = inet_ntoa(sa->sin_addr);
-			string ipaddr(ifaddr);
-			ipaddr = "//" + ipaddr;
-			if (ipaddr.find("10") == 2) {
-				ipaddr.erase(0, 2);
-				local_ip = strdup(ipaddr.c_str());
-			}
-		}
+	if (WSAStartup(MAKEWORD(1, 1), &WsaData) < 0) {
+		cout << "[ERROR] WSA Startup error" << endl;
 	}
-	freeifaddrs(ifap);
+
+	get_ip(temp_ip);
+	strcpy(local_ip, temp_ip.c_str());
 
 	if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
 		cerr << "[ERROR] Socket binding failed" << endl;
@@ -65,19 +62,19 @@ int main(int argc, char* argv[]) {
 
 	memset(&send_addr, 0, sizeof send_addr);
 	send_addr.sin_family = AF_INET;
-	send_addr.sin_port = (in_port_t)htons(REMOTEPORT);
+	send_addr.sin_port = (u_short)htons(REMOTEPORT);
 	send_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-	if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &trueflag, sizeof trueflag) < 0) {
+	if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (const char*)&trueflag, sizeof trueflag) < 0) {
 		cerr << "[ERROR] Sockopt recv failed" << endl;
 	}
 
 	memset(&recv_addr, 0, sizeof recv_addr);
 	recv_addr.sin_family = AF_INET;
-	recv_addr.sin_port = (in_port_t)htons(LOCALPORT);
+	recv_addr.sin_port = (u_short)htons(LOCALPORT);
 	recv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-	if (bind(fd, (struct sockaddr*) & recv_addr, sizeof recv_addr) < 0) {
+	if (::bind(fd, (struct sockaddr*) & recv_addr, sizeof recv_addr) == SOCKET_ERROR) {
 		cerr << "[ERROR] Socket binding failed" << endl;
 	}
 
@@ -146,7 +143,7 @@ vector<string> connect_loop(int fd, sockaddr_in send_addr, char* local_ip, bool&
 			sprintf(send_msg, "LOCALIP/SERVER:%s", local_ip);
 			inet_pton(AF_INET, remote_ip.c_str(), &(send_addr.sin_addr));
 			network_send(fd, send_addr, send_msg);
-			usleep(1000000);
+			Sleep(1000);
 
 			if (bots.size() == 1) return bots;
 		}
@@ -188,4 +185,47 @@ void display_loop(bool& connected, wpi::ArrayRef<wpi::StringRef>* ips, nt::Netwo
 	}
 	cams.clear();
 	streams.clear();
+	return;
+}
+
+int get_ip(string& ip) {
+	PMIB_IPADDRTABLE pIPAddrTable;
+	DWORD dwSize = 0;
+	DWORD dwRetVal = 0;
+	IN_ADDR IPAddr;
+	LPVOID lpMsgBuf;
+
+	pIPAddrTable = (MIB_IPADDRTABLE*)MALLOC(sizeof(MIB_IPADDRTABLE));
+
+	if (pIPAddrTable) {
+		if (GetIpAddrTable(pIPAddrTable, &dwSize, 0) ==
+			ERROR_INSUFFICIENT_BUFFER) {
+			FREE(pIPAddrTable);
+			pIPAddrTable = (MIB_IPADDRTABLE*)MALLOC(dwSize);
+		}
+		if (pIPAddrTable == NULL) {
+			exit(1);
+		}
+	}
+
+	if ((dwRetVal = GetIpAddrTable(pIPAddrTable, &dwSize, 0)) != NO_ERROR) {
+		return 1;
+	}
+
+	for (int i = 0; i < (int)pIPAddrTable->dwNumEntries; i++) {
+		IPAddr.S_un.S_addr = (u_long)pIPAddrTable->table[i].dwAddr;
+		string local_ip(inet_ntoa(IPAddr));
+		local_ip = "//" + local_ip;
+		if (local_ip.find("10") == 2) {
+			local_ip.erase(0, 2);
+			ip = local_ip;
+		}
+	}
+
+	if (pIPAddrTable) {
+		FREE(pIPAddrTable);
+		pIPAddrTable = NULL;
+	}
+
+	return 0;
 }
