@@ -36,15 +36,17 @@ using namespace std;
 
 int network_send(int fd, sockaddr_in addr, char* msg);
 int network_recv(int fd, char* buf, size_t len);
-vector<string> connect_loop(int fd, sockaddr_in send_addr, char* local_ip, bool& connected);
+int connect_loop(int fd, sockaddr_in send_addr, char* local_ip, bool& connected, vector<string> &bots);
 void display_loop(bool& connected, wpi::ArrayRef<wpi::StringRef>* ips, nt::NetworkTableInstance* ntinst);
 int get_ip(string& ip);
 
 int main(int argc, char* argv[]) {
 	struct sockaddr_in send_addr, recv_addr;
 	vector<cs::CvSink> streams;
+	vector<string> bots;
 	bool connected = false;
-	int trueflag = 1, fd;
+	BOOL trueflag = TRUE;
+	int fd;
 	WSADATA WsaData;
 	char* local_ip = (char*)MALLOC(sizeof(char));
 	string temp_ip;
@@ -65,7 +67,7 @@ int main(int argc, char* argv[]) {
 	send_addr.sin_port = (u_short)htons(REMOTEPORT);
 	send_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-	if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (const char*)&trueflag, sizeof trueflag) < 0) {
+	if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (char*)&trueflag, sizeof trueflag) < 0) {
 		cerr << "[ERROR] Sockopt recv failed" << endl;
 	}
 
@@ -74,11 +76,11 @@ int main(int argc, char* argv[]) {
 	recv_addr.sin_port = (u_short)htons(LOCALPORT);
 	recv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-	if (::bind(fd, (struct sockaddr*) & recv_addr, sizeof recv_addr) == SOCKET_ERROR) {
+	if (::bind(fd, (struct sockaddr*)&recv_addr, sizeof(recv_addr)) == SOCKET_ERROR) {
 		cerr << "[ERROR] Socket binding failed" << endl;
 	}
 
-	vector<string> bots = connect_loop(fd, send_addr, local_ip, connected);
+	connect_loop(fd, send_addr, local_ip, connected, bots);
 
 	vector<wpi::StringRef> refs;
 	for (int i = 0; i < bots.size(); i++) {
@@ -93,7 +95,7 @@ int main(int argc, char* argv[]) {
 		if (!connected) {
 			ntinst.StopClient();
 			ntinst.StopDSClient();
-			bots = connect_loop(fd, send_addr, local_ip, connected);
+			connect_loop(fd, send_addr, local_ip, connected, bots);
 			vector<wpi::StringRef> refs;
 			for (int i = 0; i < bots.size(); i++) {
 				refs.push_back(wpi::StringRef(bots.at(i)));
@@ -111,7 +113,7 @@ int main(int argc, char* argv[]) {
 }
 
 int network_send(int fd, struct sockaddr_in addr, char* msg) {
-	if (sendto(fd, msg, strlen(msg) + 1, 0, (struct sockaddr*) & addr, sizeof addr) < 0) {
+	if (sendto(fd, msg, 50, 0, (struct sockaddr*)&addr, sizeof addr) < 0) {
 		cerr << "[ERROR] Sending failed" << endl;
 		return -1;
 	}
@@ -126,9 +128,10 @@ int network_recv(int fd, char* buf, size_t len) {
 	return 0;
 }
 
-vector<string> connect_loop(int fd, sockaddr_in send_addr, char* local_ip, bool& connected) {
-	vector<string> bots;
+int connect_loop(int fd, sockaddr_in send_addr, char* local_ip, bool& connected, vector<string> &bots) {
+	bots.clear();
 	while (true) {
+		cout << "[STATUS] Recieving..." << endl;
 		char recv_buf[30];
 		network_recv(fd, recv_buf, sizeof(recv_buf));
 		string recv_msg(recv_buf);
@@ -142,12 +145,13 @@ vector<string> connect_loop(int fd, sockaddr_in send_addr, char* local_ip, bool&
 
 			char send_msg[30];
 			sprintf(send_msg, "LOCALIP/SERVER:%s", local_ip);
+			cout << send_msg << endl;
 			inet_pton(AF_INET, remote_ip.c_str(), &(send_addr.sin_addr));
 			network_send(fd, send_addr, send_msg);
-			Sleep(1000);
 
-			if (bots.size() == 1) return bots;
+			if (bots.size() == 1) return 0;
 		}
+		Sleep(1000);
 	}
 }
 
@@ -213,15 +217,19 @@ int get_ip(string& ip) {
 		return 1;
 	}
 
-	for (int i = 0; i < (int)pIPAddrTable->dwNumEntries; i++) {
-		IPAddr.S_un.S_addr = (u_long)pIPAddrTable->table[i].dwAddr;
-		string local_ip(inet_ntoa(IPAddr));
-		local_ip = "//" + local_ip;
-		if (local_ip.find("10") == 2) {
-			local_ip.erase(0, 2);
-			ip = local_ip;
+	if (pIPAddrTable) {
+		for (int i = 0; i < (int)pIPAddrTable->dwNumEntries; i++) {
+			IPAddr.S_un.S_addr = (u_long)pIPAddrTable->table[i].dwAddr;
+			string local_ip(inet_ntoa(IPAddr));
+			local_ip = "//" + local_ip;
+			if (local_ip.find("10") == 2) {
+				local_ip.erase(0, 2);
+				ip = local_ip;
+				cout << "[STATUS] Local IP: " << ip << endl;
+			}
 		}
 	}
+	
 
 	if (pIPAddrTable) {
 		FREE(pIPAddrTable);

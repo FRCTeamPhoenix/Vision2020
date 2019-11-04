@@ -35,19 +35,19 @@ using namespace std;
 
 int network_send(int fd, sockaddr_in addr, char* msg);
 int network_recv(int fd, sockaddr_in addr, char* buf, size_t len);
-string connect_loop(int fd, sockaddr_in send_addr, sockaddr_in recv_addr, string bot, string local_ip);
-int get_ip(string& ip, string& braddr);
+int connect_loop(int fd, sockaddr_in send_addr, sockaddr_in recv_addr, string bot, string local_ip, string &remote_ip);
+int get_ip(string& ip);
 
 int main(int argc, char* argv[]) {
-	string local_ip, server_ip, br_addr, bot = "0";
+	string local_ip, server_ip, bot = "0";
 	struct sockaddr_in send_addr, recv_addr;
 	bool connected = false;
-	char trueflag = 'a';
+	BOOL trueflag = TRUE;
 	int fd;
 	WSADATA WsaData;
 	PCSTR opt;
 	cv::Mat frame;
-	int tv = 500;
+	int tv = 1000;
 
 	if (WSAStartup(MAKEWORD(1, 1), &WsaData) < 0) {
 		cout << "[ERROR] WSA Startup error" << endl;
@@ -59,12 +59,12 @@ int main(int argc, char* argv[]) {
 		return -1;
 	}
 
-	if (setsockopt(fd, SOL_SOCKET, SO_BROADCAST, &trueflag, sizeof(trueflag)) < 0) {
+	if (setsockopt(fd, SOL_SOCKET, SO_BROADCAST, (char *)&trueflag, sizeof(trueflag)) < 0) {
 		cerr << "[ERROR] Sockopt broadcast failed" << endl;
 		return -1;
 	}
 
-	if (get_ip(local_ip, br_addr) < 0) {
+	if (get_ip(local_ip) < 0) {
 		cerr << "[ERROR] Could not retrieve IP Address" << endl;
 		return -1;
 	}
@@ -72,10 +72,9 @@ int main(int argc, char* argv[]) {
 	memset(&send_addr, 0, sizeof send_addr);
 	send_addr.sin_family = AF_INET;
 	send_addr.sin_port = (u_short)htons(REMOTEPORT);
-	opt = (PCSTR)br_addr.c_str();
-	InetPtonA(AF_INET, opt, &send_addr.sin_addr);
+	send_addr.sin_addr.s_addr = INADDR_BROADCAST;
 
-	if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &trueflag, sizeof(trueflag)) < 0) {
+	if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (char *)&trueflag, sizeof(trueflag)) < 0) {
 		cerr << "[ERROR] Sockopt recv failed" << endl;
 		return -1;
 	}
@@ -85,12 +84,12 @@ int main(int argc, char* argv[]) {
 	recv_addr.sin_port = (u_short)htons(LOCALPORT);
 	recv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-	if (::bind(fd, (struct sockaddr*) & recv_addr, sizeof recv_addr) < 0) {
+	if (::bind(fd, (struct sockaddr*) &recv_addr, sizeof(recv_addr)) < 0) {
 		cerr << "[ERROR] Socket binding failed" << endl;
 		return -1;
 	}
 
-	if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(const char*)) < 0) {
+	if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, (char*)&tv, sizeof(tv)) < 0) {
 		cerr << "[ERROR] Sockopt timeout failed" << endl;
 		return -1;
 	}
@@ -100,11 +99,9 @@ int main(int argc, char* argv[]) {
 	function<void(const nt::ConnectionNotification&)> connection_listener = [connected, fd, send_addr, recv_addr, server_ip, bot, local_ip](const nt::ConnectionNotification& event) mutable {
 		connected = event.connected;
 		cout << "[STATUS] Connection status: " << (connected ? "connected" : "disconnected") << endl;
-		server_ip.assign(connect_loop(fd, send_addr, recv_addr, bot, local_ip));
+
 	};
 	ntinst.AddConnectionListener(connection_listener, true);
-
-	server_ip.assign(connect_loop(fd, send_addr, recv_addr, bot, local_ip));
 
 	cs::UsbCamera camera = frc::CameraServer::GetInstance()->StartAutomaticCapture();
 	camera.SetResolution(720, 480);
@@ -116,6 +113,8 @@ int main(int argc, char* argv[]) {
 	server.SetCompression(80);
 	server.SetFPS(30);
 	server.SetSource(output);
+
+	connect_loop(fd, send_addr, recv_addr, bot, local_ip, server_ip);
 
 	while (true) {
 		sink.GrabFrame(frame);
@@ -146,99 +145,69 @@ int network_recv(int fd, struct sockaddr_in addr, char* buf, size_t len) {
 	return 0;
 }
 
-string connect_loop(int fd, struct sockaddr_in send_addr, struct sockaddr_in recv_addr, string bot, string local_ip) {
+int connect_loop(int fd, struct sockaddr_in send_addr, struct sockaddr_in recv_addr, string bot, string local_ip, string &remote_ip) {
 	while (true) {
 		char send_msg[50];
 		sprintf(send_msg, "LOCALIP/BOT%s:%s", bot.c_str(), local_ip.c_str());
 		network_send(fd, send_addr, send_msg);
 
-		Sleep(1000);
+		Sleep(100);
 
 		char recv_msg[50];
-		network_recv(fd, recv_addr, recv_msg, sizeof(recv_msg));
+		network_recv(fd, recv_addr, recv_msg, 50);
+		cout << recv_msg << endl;
 		string recv_str(recv_msg);
 		string identifier = recv_str.substr(0, recv_str.find(":"));
-		string remote_ip = recv_str.substr(recv_str.find(":") + 1);
-
+		string ip_str = recv_str.substr(recv_str.find(":") + 1);
 		if (identifier == "LOCALIP/SERVER") {
-			cout << "[STATUS] Connected to " + remote_ip << endl;
-			return remote_ip;
+			cout << "[STATUS] Connected to " + ip_str << endl;
+			remote_ip.assign(ip_str);
+			return 0;
 		}
 	}
 }
 
-int get_ip(string& ip, string& braddr) {
-	PIP_ADAPTER_ADDRESSES IPAddrs, CurAddrs;
-	PIP_ADAPTER_UNICAST_ADDRESS localAddr;
-	PIP_ADAPTER_MULTICAST_ADDRESS brAddr;
-	ULONG bufSize = 15000, tries = 0;
+int get_ip(string& ip) {
+	PMIB_IPADDRTABLE pIPAddrTable;
 	DWORD dwSize = 0;
 	DWORD dwRetVal = 0;
 	IN_ADDR IPAddr;
 	LPVOID lpMsgBuf;
 
-	ULONG flags = GAA_FLAG_INCLUDE_PREFIX;
-	IPAddrs = (IP_ADAPTER_ADDRESSES*)MALLOC(sizeof(IP_ADAPTER_ADDRESSES));
-	CurAddrs = (IP_ADAPTER_ADDRESSES*)MALLOC(sizeof(IP_ADAPTER_ADDRESSES));
+	pIPAddrTable = (MIB_IPADDRTABLE*)MALLOC(sizeof(MIB_IPADDRTABLE));
 
-	do {
-		IPAddrs = (IP_ADAPTER_ADDRESSES*)MALLOC(bufSize);
-		if (IPAddrs == NULL) {
-			cerr << "[ERROR] MALLOC for IPAddrs failed" << endl;
-			return -1;
+	if (pIPAddrTable) {
+		if (GetIpAddrTable(pIPAddrTable, &dwSize, 0) ==
+			ERROR_INSUFFICIENT_BUFFER) {
+			FREE(pIPAddrTable);
+			pIPAddrTable = (MIB_IPADDRTABLE*)MALLOC(dwSize);
 		}
-
-		dwRetVal = GetAdaptersAddresses(AF_INET, flags, NULL, IPAddrs, &bufSize);
-
-		if (dwRetVal == ERROR_BUFFER_OVERFLOW) {
-			FREE(IPAddrs);
-			IPAddrs = NULL;
+		if (pIPAddrTable == NULL) {
+			exit(1);
 		}
-		else {
-			break;
-		}
-		tries++;
-	} while ((dwRetVal == ERROR_BUFFER_OVERFLOW) && (tries < 10));
+	}
 
+	if ((dwRetVal = GetIpAddrTable(pIPAddrTable, &dwSize, 0)) != NO_ERROR) {
+		return 1;
+	}
 
-	if (dwRetVal == NO_ERROR) {
-		CurAddrs = IPAddrs;
-		while (CurAddrs) {
-			string local_addr, br_addr;
-			bool valid_ip = false;
-			localAddr = CurAddrs->FirstUnicastAddress;
-			if (localAddr) {
-				for (int i = 0; localAddr != NULL; i++) {
-					char* ipChar = inet_ntoa(((sockaddr_in*)localAddr->Address.lpSockaddr)->sin_addr);
-					string ip_str(ipChar);
-					ip_str = "//" + ip_str;
-					if (ip_str.find("10") == 2) {
-						ip_str.erase(0, 2);
-						local_addr.assign(ip_str);
-						valid_ip = true;
-					}
-					localAddr = localAddr->Next;
-				}
+	if (pIPAddrTable) {
+		for (int i = 0; i < (int)pIPAddrTable->dwNumEntries; i++) {
+			IPAddr.S_un.S_addr = (u_long)pIPAddrTable->table[i].dwAddr;
+			string local_ip(inet_ntoa(IPAddr));
+			local_ip = "//" + local_ip;
+			if (local_ip.find("10") == 2) {
+				local_ip.erase(0, 2);
+				ip = local_ip;
+				cout << "[STATUS] Local IP: " << ip << endl;
 			}
-			brAddr = CurAddrs->FirstMulticastAddress;
-			if (brAddr) {
-				for (int i = 0; brAddr != NULL; i++) {
-					char* brChar = inet_ntoa(((sockaddr_in*)brAddr->Address.lpSockaddr)->sin_addr);
-					string br_str(brChar);
-					br_str = "//" + br_str;
-					if (br_str.find("224") != 2 && valid_ip) {
-						br_str.erase(0, 2);
-						br_addr.assign(br_str);
-					}
-					brAddr = brAddr->Next;
-				}
-			}
-			if (valid_ip) {
-				ip = local_addr;
-				braddr = br_addr;
-			}
-			CurAddrs = CurAddrs->Next;
 		}
+	}
+
+
+	if (pIPAddrTable) {
+		FREE(pIPAddrTable);
+		pIPAddrTable = NULL;
 	}
 
 	return 0;
